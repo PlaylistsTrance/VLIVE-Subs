@@ -11,7 +11,7 @@ import vlivepy.exception
 import vlivepy.model
 
 
-MAX_TRIES = 10
+MAX_ATTEMPTS = 10
 RE_WINDOWS = re.compile(r"[<>:\"/\\|?*]")
 
 
@@ -69,12 +69,16 @@ def main():
             if board_post.has_official_video:
                 post = board_post.to_object()
                 video = post.official_video()
-                for _ in range(MAX_TRIES):
+                attempt = 0
+                while attempt < MAX_ATTEMPTS:
                     try:
                         video_info = video.getVodPlayInfo()
                         break
                     except vlivepy.exception.APINetworkError:
+                        attempt += 1
                         time.sleep(1)
+                    except vlivepy.exception.APIServerResponseError:
+                        attempt = MAX_ATTEMPTS
                 else:
                     print(f"ERROR: Was not able to download subtitles for {video_url(post.video_seq)}")
                     continue
