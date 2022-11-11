@@ -74,7 +74,7 @@ def main():
                     try:
                         video_info = video.getVodPlayInfo()
                         break
-                    except vlivepy.exception.APINetworkError:
+                    except (vlivepy.exception.APINetworkError, KeyError):
                         attempt += 1
                         time.sleep(1)
                     except vlivepy.exception.APIServerResponseError:
