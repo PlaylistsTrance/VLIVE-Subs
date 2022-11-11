@@ -4,7 +4,6 @@ import os
 import re
 import requests
 import time
-import unicodedata
 
 import vlivepy.board
 import vlivepy.channel
@@ -19,6 +18,8 @@ RE_WINDOWS = re.compile(r"[<>:\"/\\|?*]")
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("file", type=str, help="File with list of channel boards")
+    parser.add_argument("-d", "--dupes-only", action="store_true",
+                        help="Only download subtitles where language-type occur multiple times")
     return parser.parse_args()
 
 
@@ -43,8 +44,8 @@ def old_code():
     star_board['boardId']
 
 
-def post_url(video_id):
-    return f"https://vlive.tv/post/{video_id}"
+def video_url(video_id):
+    return f"https://vlive.tv/video/{video_id}"
 
 
 def main():
@@ -57,7 +58,7 @@ def main():
         match = url_rule.search(url)
         if not match:
             print(f"\"{url}\" did not match a channel board URL")
-            return
+            continue
 
         channel = vlivepy.model.Channel(match['channel'])
         channel_name = channel.channel_name
@@ -75,12 +76,12 @@ def main():
                     except vlivepy.exception.APINetworkError:
                         time.sleep(1)
                 else:
-                    print(f"ERROR: Was not able to download subtitles for {post_url(post.post_id)}")
+                    print(f"ERROR: Was not able to download subtitles for {video_url(post.video_seq)}")
                     continue
                 upload_date = datetime.utcfromtimestamp(video.created_at).strftime('%y%m%d')
-                filename = f"{slugify(channel_name)}/{upload_date} {slugify(video.title)} [{post.post_id}]"
+                filename = f"{slugify(channel_name)}/{upload_date} {slugify(video.title)} [{post.video_seq}]"
                 captions = video_info.get("captions", dict()).get("list", list())
-                print(f"{post_url(post.post_id)} has {len(captions)} caption{'s'*int((len(captions) != 1))}.")
+                print(f"{video_url(post.video_seq)} has {len(captions)} caption{'s' * int((len(captions) != 1))}.")
                 subs_found += len(captions)
                 if not os.path.exists(os.path.dirname(filename)) and captions:
                     os.mkdir(os.path.dirname(filename))
@@ -92,7 +93,7 @@ def main():
                     else:
                         type_dict[locale_type] = [caption]
                 for locale_type, captions in type_dict.items():
-                    if (dupes_only and len(captions) > 1) or not dupes_only:
+                    if (args.dupes_only and len(captions) > 1) or not args.dupes_only:
                         for i, caption in enumerate(captions):
                             caption_num = f"_{i+1}" if len(captions) > 1 else ""
                             filename_sub = f"{filename}.{locale_type[0]}_{locale_type[1]}{caption_num}.vtt"
