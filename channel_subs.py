@@ -1,5 +1,10 @@
+"""
+Script to download all subs from a text file containing a list of channel board URLs
+"""
+
 import argparse
 from datetime import datetime
+import logging
 import os
 import re
 import requests
@@ -11,8 +16,14 @@ import vlivepy.exception
 import vlivepy.model
 
 
-MAX_ATTEMPTS = 10
 RE_WINDOWS = re.compile(r"[<>:\"/\\|?*]")
+
+
+def check_positive(value):
+    int_value = int(value)
+    if int_value <= 0:
+        raise argparse.ArgumentTypeError(f"{value} is an invalid positive int value")
+    return int_value
 
 
 def get_args():
@@ -20,14 +31,20 @@ def get_args():
     parser.add_argument("file", type=str, help="File with list of channel boards")
     parser.add_argument("-d", "--dupes-only", action="store_true",
                         help="Only download subtitles where language-type occur multiple times")
+    parser.add_argument("-l", "--log-level", type=str, choices=["info", "warning", "error"], default="warning",
+                        help="Log level: info, warning or error")
+    parser.add_argument("-r", "--retry-amount", type=check_positive, default=10,
+                        help="Times to retry downloading VOD info")
     return parser.parse_args()
 
 
-def slugify(value):
+def slugify(value: str):
+    """Simple removal of illegal Windows filename characters from a string"""
     return RE_WINDOWS.sub("", value)
 
 
 def old_code():
+    """Unused code to find a channel's STAR board"""
     grouped_boards = vlivepy.channel.getGroupedBoards(match['channel'])
     star_board = None
     for board_group in grouped_boards:
@@ -50,14 +67,17 @@ def video_url(video_id):
 
 def main():
     args = get_args()
+    if args.log_level == "info":
+        logging.basicConfig(level=logging.INFO)
+    elif args.log_level == "error":
+        logging.basicConfig(level=logging.ERROR)
     url_rule = re.compile(r'(?P<channel>[A-Z0-9]+)/board/(?P<board>\d+)')
-    dupes_only = False
     with open(args.file, 'r') as f:
         urls = f.read().splitlines()
     for url in urls:
         match = url_rule.search(url)
         if not match:
-            print(f"\"{url}\" did not match a channel board URL")
+            logging.warning(f"\"{url}\" did not match a channel board URL")
             continue
 
         channel = vlivepy.model.Channel(match['channel'])
@@ -70,7 +90,7 @@ def main():
                 post = board_post.to_object()
                 video = post.official_video()
                 attempt = 0
-                while attempt < MAX_ATTEMPTS:
+                while attempt < args.retry_amount:
                     try:
                         video_info = video.getVodPlayInfo()
                         break
@@ -78,14 +98,15 @@ def main():
                         attempt += 1
                         time.sleep(1)
                     except vlivepy.exception.APIServerResponseError:
-                        attempt = MAX_ATTEMPTS
+                        attempt = args.retry_amount
                 else:
-                    print(f"ERROR: Was not able to download subtitles for {video_url(post.video_seq)}")
+                    logging.warning(f"ERROR: Was not able to download subtitles for {video_url(post.video_seq)}")
                     continue
                 upload_date = datetime.utcfromtimestamp(video.created_at).strftime('%y%m%d')
                 filename = f"{slugify(channel_name)}/{upload_date} {slugify(video.title)} [{post.video_seq}]"
                 captions = video_info.get("captions", dict()).get("list", list())
-                print(f"{video_url(post.video_seq)} has {len(captions)} caption{'s' * int((len(captions) != 1))}.")
+                logging.info(f"{video_url(post.video_seq)} has {len(captions)}"
+                             f" caption{'s' * int((len(captions) != 1))}.")
                 subs_found += len(captions)
                 if not os.path.exists(os.path.dirname(filename)) and captions:
                     os.mkdir(os.path.dirname(filename))
