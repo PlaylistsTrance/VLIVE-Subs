@@ -8,6 +8,7 @@ Options:
 1. `-h`: Shows help information
 2. `-v`: Download video as well
 3. `-d`: Only download subtitles for languages that have multiple official and/or fan subs
+
 Files are saved in the same directory as where the script was called from.  
 You can open a terminal in a directory where you want to save the files, and provide the full path to the script to run it.
 # Examples 
